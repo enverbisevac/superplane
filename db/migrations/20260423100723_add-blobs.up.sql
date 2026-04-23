@@ -12,7 +12,7 @@ CREATE TABLE blobs (
   size_bytes         BIGINT      NOT NULL DEFAULT 0,
   content_type       TEXT        NULL,
   status             TEXT        NOT NULL DEFAULT 'pending',
-  created_by_user_id uuid        NULL,
+  created_by         uuid        NULL,
   created_at         TIMESTAMPTZ NOT NULL,
   updated_at         TIMESTAMPTZ NOT NULL,
 

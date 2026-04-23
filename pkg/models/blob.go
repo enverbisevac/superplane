@@ -38,7 +38,7 @@ type Blob struct {
 	SizeBytes       int64
 	ContentType     *string
 	Status          string
-	CreatedByUserID *uuid.UUID
+	CreatedBy *uuid.UUID
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -59,7 +59,7 @@ type CreatePendingBlobInput struct {
 	Path            string
 	ObjectKey       string
 	ContentType     *string
-	CreatedByUserID *uuid.UUID
+	CreatedBy *uuid.UUID
 }
 
 func FindBlob(id uuid.UUID) (*Blob, error) {
@@ -212,7 +212,7 @@ func CreatePendingBlob(tx *gorm.DB, input CreatePendingBlobInput) (*Blob, error)
 		ObjectKey:       input.ObjectKey,
 		ContentType:     input.ContentType,
 		Status:          BlobStatusPending,
-		CreatedByUserID: input.CreatedByUserID,
+		CreatedBy: input.CreatedBy,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
