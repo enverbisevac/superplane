@@ -167,6 +167,31 @@ CREATE TABLE public.app_installations (
 
 
 --
+-- Name: blobs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.blobs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    scope_type text NOT NULL,
+    canvas_id uuid,
+    node_id text,
+    execution_id uuid,
+    path text NOT NULL,
+    object_key text NOT NULL,
+    size_bytes bigint DEFAULT 0 NOT NULL,
+    content_type text,
+    status text DEFAULT 'pending'::text NOT NULL,
+    created_by_user_id uuid,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT blobs_scope_ids_check CHECK ((((scope_type = 'org'::text) AND (canvas_id IS NULL) AND (node_id IS NULL) AND (execution_id IS NULL)) OR ((scope_type = 'canvas'::text) AND (canvas_id IS NOT NULL) AND (node_id IS NULL) AND (execution_id IS NULL)) OR ((scope_type = 'node'::text) AND (canvas_id IS NOT NULL) AND (node_id IS NOT NULL) AND (execution_id IS NULL)) OR ((scope_type = 'execution'::text) AND (execution_id IS NOT NULL)))),
+    CONSTRAINT blobs_scope_type_check CHECK ((scope_type = ANY (ARRAY['org'::text, 'canvas'::text, 'node'::text, 'execution'::text]))),
+    CONSTRAINT blobs_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text])))
+);
+
+
+--
 -- Name: blueprints; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -751,6 +776,14 @@ ALTER TABLE ONLY public.app_installations
 
 
 --
+-- Name: blobs blobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.blobs
+    ADD CONSTRAINT blobs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: blueprints blueprints_organization_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1149,6 +1182,69 @@ CREATE UNIQUE INDEX idx_app_installations_org_name_unique ON public.app_installa
 --
 
 CREATE INDEX idx_app_installations_organization_id ON public.app_installations USING btree (organization_id);
+
+
+--
+-- Name: idx_blobs_canvas; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_blobs_canvas ON public.blobs USING btree (organization_id, canvas_id, created_at DESC) WHERE (canvas_id IS NOT NULL);
+
+
+--
+-- Name: idx_blobs_canvas_path_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_canvas_path_unique ON public.blobs USING btree (organization_id, canvas_id, path) WHERE ((scope_type = 'canvas'::text) AND (status = 'ready'::text));
+
+
+--
+-- Name: idx_blobs_execution; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_blobs_execution ON public.blobs USING btree (organization_id, execution_id, created_at DESC) WHERE (execution_id IS NOT NULL);
+
+
+--
+-- Name: idx_blobs_execution_path_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_execution_path_unique ON public.blobs USING btree (organization_id, execution_id, path) WHERE ((scope_type = 'execution'::text) AND (status = 'ready'::text));
+
+
+--
+-- Name: idx_blobs_node; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_blobs_node ON public.blobs USING btree (organization_id, canvas_id, node_id, created_at DESC) WHERE (node_id IS NOT NULL);
+
+
+--
+-- Name: idx_blobs_node_path_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_node_path_unique ON public.blobs USING btree (organization_id, canvas_id, node_id, path) WHERE ((scope_type = 'node'::text) AND (status = 'ready'::text));
+
+
+--
+-- Name: idx_blobs_object_key_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_object_key_unique ON public.blobs USING btree (object_key);
+
+
+--
+-- Name: idx_blobs_org_path_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_org_path_unique ON public.blobs USING btree (organization_id, path) WHERE ((scope_type = 'org'::text) AND (status = 'ready'::text));
+
+
+--
+-- Name: idx_blobs_org_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_blobs_org_scope ON public.blobs USING btree (organization_id, scope_type, created_at DESC);
 
 
 --
@@ -1553,6 +1649,30 @@ ALTER TABLE ONLY public.app_installations
 
 
 --
+-- Name: blobs blobs_canvas_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.blobs
+    ADD CONSTRAINT blobs_canvas_id_fkey FOREIGN KEY (canvas_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
+
+
+--
+-- Name: blobs blobs_execution_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.blobs
+    ADD CONSTRAINT blobs_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES public.workflow_node_executions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: blobs blobs_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.blobs
+    ADD CONSTRAINT blobs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
 -- Name: canvas_memories canvas_memories_canvas_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1928,7 +2048,7 @@ SET row_security = off;
 --
 
 COPY public.schema_migrations (version, dirty) FROM stdin;
-20260414233443	f
+20260423100723	f
 \.
 
 
