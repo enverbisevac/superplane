@@ -167,6 +167,31 @@ CREATE TABLE public.app_installations (
 
 
 --
+-- Name: blobs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.blobs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    scope_type text NOT NULL,
+    canvas_id uuid,
+    node_id text,
+    execution_id uuid,
+    path text NOT NULL,
+    object_key text NOT NULL,
+    size_bytes bigint DEFAULT 0 NOT NULL,
+    content_type text,
+    status text DEFAULT 'pending'::text NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT blobs_scope_ids_check CHECK ((((scope_type = 'org'::text) AND (canvas_id IS NULL) AND (node_id IS NULL) AND (execution_id IS NULL)) OR ((scope_type = 'canvas'::text) AND (canvas_id IS NOT NULL) AND (node_id IS NULL) AND (execution_id IS NULL)) OR ((scope_type = 'node'::text) AND (canvas_id IS NOT NULL) AND (node_id IS NOT NULL) AND (execution_id IS NULL)) OR ((scope_type = 'execution'::text) AND (execution_id IS NOT NULL)))),
+    CONSTRAINT blobs_scope_type_check CHECK ((scope_type = ANY (ARRAY['org'::text, 'canvas'::text, 'node'::text, 'execution'::text]))),
+    CONSTRAINT blobs_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text])))
+);
+
+
+--
 -- Name: blueprints; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -198,6 +223,19 @@ CREATE TABLE public.canvas_memories (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: canvases; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.canvases (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    name character varying(128) NOT NULL,
+    created_at timestamp without time zone NOT NULL,
+    created_by uuid NOT NULL,
+    updated_at timestamp without time zone NOT NULL
 );
 
 
@@ -263,6 +301,37 @@ CREATE TABLE public.email_settings (
     smtp_use_tls boolean DEFAULT false NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+--
+-- Name: event_sources; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.event_sources (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    canvas_id uuid NOT NULL,
+    name character varying(128) NOT NULL,
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL,
+    key bytea NOT NULL
+);
+
+
+--
+-- Name: events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.events (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    source_id uuid NOT NULL,
+    canvas_id uuid NOT NULL,
+    source_name character varying(128) NOT NULL,
+    source_type character varying(64) NOT NULL,
+    received_at timestamp without time zone NOT NULL,
+    raw jsonb NOT NULL,
+    state character varying(64) NOT NULL,
+    headers jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
 
@@ -406,6 +475,92 @@ CREATE TABLE public.secrets (
     data bytea NOT NULL,
     domain_type character varying(64) NOT NULL,
     domain_id character varying(64) NOT NULL
+);
+
+
+--
+-- Name: stage_connections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stage_connections (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    canvas_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    source_id uuid NOT NULL,
+    source_name character varying(128) NOT NULL,
+    source_type character varying(64) NOT NULL,
+    filter_operator character varying(16) NOT NULL,
+    filters jsonb NOT NULL
+);
+
+
+--
+-- Name: stage_event_approvals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stage_event_approvals (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    stage_event_id uuid NOT NULL,
+    approved_at timestamp without time zone NOT NULL,
+    approved_by uuid NOT NULL
+);
+
+
+--
+-- Name: stage_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stage_events (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    stage_id uuid NOT NULL,
+    event_id uuid NOT NULL,
+    source_id uuid NOT NULL,
+    source_name character varying(128) NOT NULL,
+    source_type character varying(64) NOT NULL,
+    state character varying(64) NOT NULL,
+    state_reason character varying(64),
+    created_at timestamp without time zone NOT NULL,
+    inputs jsonb DEFAULT '{}'::jsonb NOT NULL
+);
+
+
+--
+-- Name: stage_executions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stage_executions (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    canvas_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    stage_event_id uuid NOT NULL,
+    reference_id character varying(64) NOT NULL,
+    state character varying(64) NOT NULL,
+    result character varying(64) NOT NULL,
+    outputs jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL,
+    started_at timestamp without time zone,
+    finished_at timestamp without time zone
+);
+
+
+--
+-- Name: stages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stages (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    name character varying(128) NOT NULL,
+    canvas_id uuid NOT NULL,
+    created_at timestamp without time zone NOT NULL,
+    created_by uuid NOT NULL,
+    updated_at timestamp without time zone,
+    updated_by uuid,
+    executor_spec jsonb NOT NULL,
+    conditions jsonb,
+    inputs jsonb DEFAULT '[]'::jsonb NOT NULL,
+    outputs jsonb DEFAULT '[]'::jsonb NOT NULL,
+    input_mappings jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 
 
@@ -751,6 +906,14 @@ ALTER TABLE ONLY public.app_installations
 
 
 --
+-- Name: blobs blobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.blobs
+    ADD CONSTRAINT blobs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: blueprints blueprints_organization_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -772,6 +935,22 @@ ALTER TABLE ONLY public.blueprints
 
 ALTER TABLE ONLY public.canvas_memories
     ADD CONSTRAINT canvas_memories_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: canvases canvases_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.canvases
+    ADD CONSTRAINT canvases_name_key UNIQUE (name);
+
+
+--
+-- Name: canvases canvases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.canvases
+    ADD CONSTRAINT canvases_pkey PRIMARY KEY (id);
 
 
 --
@@ -804,6 +983,30 @@ ALTER TABLE ONLY public.email_settings
 
 ALTER TABLE ONLY public.email_settings
     ADD CONSTRAINT email_settings_provider_key UNIQUE (provider);
+
+
+--
+-- Name: event_sources event_sources_canvas_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.event_sources
+    ADD CONSTRAINT event_sources_canvas_id_name_key UNIQUE (canvas_id, name);
+
+
+--
+-- Name: event_sources event_sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.event_sources
+    ADD CONSTRAINT event_sources_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: events events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.events
+    ADD CONSTRAINT events_pkey PRIMARY KEY (id);
 
 
 --
@@ -916,6 +1119,70 @@ ALTER TABLE ONLY public.secrets
 
 ALTER TABLE ONLY public.secrets
     ADD CONSTRAINT secrets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: stage_connections stage_connections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_connections
+    ADD CONSTRAINT stage_connections_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: stage_connections stage_connections_stage_id_source_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_connections
+    ADD CONSTRAINT stage_connections_stage_id_source_id_key UNIQUE (stage_id, source_id);
+
+
+--
+-- Name: stage_event_approvals stage_event_approvals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_event_approvals
+    ADD CONSTRAINT stage_event_approvals_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: stage_event_approvals stage_event_approvals_stage_event_id_approved_by_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_event_approvals
+    ADD CONSTRAINT stage_event_approvals_stage_event_id_approved_by_key UNIQUE (stage_event_id, approved_by);
+
+
+--
+-- Name: stage_events stage_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_events
+    ADD CONSTRAINT stage_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: stage_executions stage_executions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_executions
+    ADD CONSTRAINT stage_executions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: stages stages_canvas_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stages
+    ADD CONSTRAINT stages_canvas_id_name_key UNIQUE (canvas_id, name);
+
+
+--
+-- Name: stages stages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stages
+    ADD CONSTRAINT stages_pkey PRIMARY KEY (id);
 
 
 --
@@ -1149,6 +1416,69 @@ CREATE UNIQUE INDEX idx_app_installations_org_name_unique ON public.app_installa
 --
 
 CREATE INDEX idx_app_installations_organization_id ON public.app_installations USING btree (organization_id);
+
+
+--
+-- Name: idx_blobs_canvas; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_blobs_canvas ON public.blobs USING btree (organization_id, canvas_id, created_at DESC) WHERE (canvas_id IS NOT NULL);
+
+
+--
+-- Name: idx_blobs_canvas_path_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_canvas_path_unique ON public.blobs USING btree (organization_id, canvas_id, path) WHERE ((scope_type = 'canvas'::text) AND (status = 'ready'::text));
+
+
+--
+-- Name: idx_blobs_execution; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_blobs_execution ON public.blobs USING btree (organization_id, execution_id, created_at DESC) WHERE (execution_id IS NOT NULL);
+
+
+--
+-- Name: idx_blobs_execution_path_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_execution_path_unique ON public.blobs USING btree (organization_id, execution_id, path) WHERE ((scope_type = 'execution'::text) AND (status = 'ready'::text));
+
+
+--
+-- Name: idx_blobs_node; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_blobs_node ON public.blobs USING btree (organization_id, canvas_id, node_id, created_at DESC) WHERE (node_id IS NOT NULL);
+
+
+--
+-- Name: idx_blobs_node_path_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_node_path_unique ON public.blobs USING btree (organization_id, canvas_id, node_id, path) WHERE ((scope_type = 'node'::text) AND (status = 'ready'::text));
+
+
+--
+-- Name: idx_blobs_object_key_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_object_key_unique ON public.blobs USING btree (object_key);
+
+
+--
+-- Name: idx_blobs_org_path_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_blobs_org_path_unique ON public.blobs USING btree (organization_id, path) WHERE ((scope_type = 'org'::text) AND (status = 'ready'::text));
+
+
+--
+-- Name: idx_blobs_org_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_blobs_org_scope ON public.blobs USING btree (organization_id, scope_type, created_at DESC);
 
 
 --
@@ -1467,6 +1797,76 @@ CREATE INDEX idx_workflows_organization_id ON public.workflows USING btree (orga
 
 
 --
+-- Name: uix_event_sources_canvas; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_event_sources_canvas ON public.event_sources USING btree (canvas_id);
+
+
+--
+-- Name: uix_events_canvas; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_events_canvas ON public.events USING btree (canvas_id);
+
+
+--
+-- Name: uix_events_source; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_events_source ON public.events USING btree (source_id);
+
+
+--
+-- Name: uix_stage_connections_stage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_stage_connections_stage ON public.stage_connections USING btree (stage_id);
+
+
+--
+-- Name: uix_stage_event_approvals_events; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_stage_event_approvals_events ON public.stage_event_approvals USING btree (stage_event_id);
+
+
+--
+-- Name: uix_stage_events_source; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_stage_events_source ON public.stage_events USING btree (source_id);
+
+
+--
+-- Name: uix_stage_events_stage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_stage_events_stage ON public.stage_events USING btree (stage_id);
+
+
+--
+-- Name: uix_stage_executions_events; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_stage_executions_events ON public.stage_executions USING btree (stage_event_id);
+
+
+--
+-- Name: uix_stage_executions_stage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_stage_executions_stage ON public.stage_executions USING btree (stage_id);
+
+
+--
+-- Name: uix_stages_canvas; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX uix_stages_canvas ON public.stages USING btree (canvas_id);
+
+
+--
 -- Name: unique_human_user_in_organization; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1553,11 +1953,43 @@ ALTER TABLE ONLY public.app_installations
 
 
 --
+-- Name: blobs blobs_canvas_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.blobs
+    ADD CONSTRAINT blobs_canvas_id_fkey FOREIGN KEY (canvas_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
+
+
+--
+-- Name: blobs blobs_execution_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.blobs
+    ADD CONSTRAINT blobs_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES public.workflow_node_executions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: blobs blobs_organization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.blobs
+    ADD CONSTRAINT blobs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
 -- Name: canvas_memories canvas_memories_canvas_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.canvas_memories
     ADD CONSTRAINT canvas_memories_canvas_id_fkey FOREIGN KEY (canvas_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
+
+
+--
+-- Name: event_sources event_sources_canvas_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.event_sources
+    ADD CONSTRAINT event_sources_canvas_id_fkey FOREIGN KEY (canvas_id) REFERENCES public.canvases(id);
 
 
 --
@@ -1646,6 +2078,70 @@ ALTER TABLE ONLY public.organization_invitations
 
 ALTER TABLE ONLY public.organization_invite_links
     ADD CONSTRAINT organization_invite_links_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: stage_connections stage_connections_canvas_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_connections
+    ADD CONSTRAINT stage_connections_canvas_id_fkey FOREIGN KEY (canvas_id) REFERENCES public.canvases(id);
+
+
+--
+-- Name: stage_connections stage_connections_stage_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_connections
+    ADD CONSTRAINT stage_connections_stage_id_fkey FOREIGN KEY (stage_id) REFERENCES public.stages(id);
+
+
+--
+-- Name: stage_event_approvals stage_event_approvals_stage_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_event_approvals
+    ADD CONSTRAINT stage_event_approvals_stage_event_id_fkey FOREIGN KEY (stage_event_id) REFERENCES public.stage_events(id);
+
+
+--
+-- Name: stage_events stage_events_stage_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_events
+    ADD CONSTRAINT stage_events_stage_id_fkey FOREIGN KEY (stage_id) REFERENCES public.stages(id);
+
+
+--
+-- Name: stage_executions stage_executions_canvas_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_executions
+    ADD CONSTRAINT stage_executions_canvas_id_fkey FOREIGN KEY (canvas_id) REFERENCES public.canvases(id);
+
+
+--
+-- Name: stage_executions stage_executions_stage_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_executions
+    ADD CONSTRAINT stage_executions_stage_event_id_fkey FOREIGN KEY (stage_event_id) REFERENCES public.stage_events(id);
+
+
+--
+-- Name: stage_executions stage_executions_stage_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stage_executions
+    ADD CONSTRAINT stage_executions_stage_id_fkey FOREIGN KEY (stage_id) REFERENCES public.stages(id);
+
+
+--
+-- Name: stages stages_canvas_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stages
+    ADD CONSTRAINT stages_canvas_id_fkey FOREIGN KEY (canvas_id) REFERENCES public.canvases(id);
 
 
 --
@@ -1928,7 +2424,7 @@ SET row_security = off;
 --
 
 COPY public.schema_migrations (version, dirty) FROM stdin;
-20260414233443	f
+20260423100723	f
 \.
 
 
