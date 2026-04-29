@@ -13,7 +13,7 @@ const maxPathBytes = 1024
 // "."/".." segments; capped at maxPathBytes.
 //
 // These rules exist to guarantee that object-key generation (see
-// objectKey below) always produces a stable, traversal-free key.
+// ObjectKey below) always produces a stable, traversal-free key.
 func validatePath(p string) error {
 	if p == "" {
 		return fmt.Errorf("%w: path is empty", ErrInvalidPath)
@@ -98,11 +98,11 @@ func scopePrefix(s Scope) string {
 	return ""
 }
 
-// objectKey builds the canonical bucket key for (scope, path) after
-// validating both. Callers outside this package must never build
-// keys themselves — that would re-introduce the PR #3824 gap where
+// ObjectKey builds the canonical bucket key for (scope, path) after
+// validating both. Callers must never construct keys by string
+// concatenation — that would re-introduce the PR #3824 gap where
 // components could target arbitrary keys.
-func objectKey(s Scope, path string) (string, error) {
+func ObjectKey(s Scope, path string) (string, error) {
 	if err := validateScope(s); err != nil {
 		return "", err
 	}
