@@ -11,10 +11,12 @@ import (
 
 	recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	"github.com/superplanehq/superplane/pkg/authorization"
+	"github.com/superplanehq/superplane/pkg/blob"
 	"github.com/superplanehq/superplane/pkg/crypto"
 	"github.com/superplanehq/superplane/pkg/jwt"
 	"github.com/superplanehq/superplane/pkg/oidc"
 	pbAgents "github.com/superplanehq/superplane/pkg/protos/agents"
+	pbBlobs "github.com/superplanehq/superplane/pkg/protos/blobs"
 	pbBlueprints "github.com/superplanehq/superplane/pkg/protos/blueprints"
 	pbCanvases "github.com/superplanehq/superplane/pkg/protos/canvases"
 	pbComponents "github.com/superplanehq/superplane/pkg/protos/components"
@@ -63,6 +65,7 @@ func RunServer(
 	jwtSigner *jwt.Signer,
 	authService authorization.Authorization,
 	registry *registry.Registry,
+	blobStorage blob.Storage,
 	oidcProvider oidc.Provider,
 	port int,
 ) {
@@ -127,6 +130,9 @@ func RunServer(
 
 	secretsService := NewSecretService(encryptor, authService)
 	secretPb.RegisterSecretsServer(grpcServer, secretsService)
+
+	blobsService := NewBlobsService(blobStorage, authService)
+	pbBlobs.RegisterBlobsServer(grpcServer, blobsService)
 
 	meService := NewMeService(authService)
 	mepb.RegisterMeServer(grpcServer, meService)

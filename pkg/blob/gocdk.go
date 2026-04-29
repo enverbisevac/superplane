@@ -51,7 +51,7 @@ func (s *storage) Close() error {
 // Put streams body into the bucket under a key derived from scope
 // and path. The body is read until EOF.
 func (s *storage) Put(ctx context.Context, scope Scope, path string, body io.Reader, opts PutOptions) error {
-	key, err := objectKey(scope, path)
+	key, err := ObjectKey(scope, path)
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (s *storage) Put(ctx context.Context, scope Scope, path string, body io.Rea
 // describing it. The caller must Close the ReadCloser. Returns
 // ErrBlobNotFound when the blob does not exist.
 func (s *storage) Get(ctx context.Context, scope Scope, path string) (io.ReadCloser, BlobInfo, error) {
-	key, err := objectKey(scope, path)
+	key, err := ObjectKey(scope, path)
 	if err != nil {
 		return nil, BlobInfo{}, err
 	}
@@ -99,7 +99,7 @@ func (s *storage) Get(ctx context.Context, scope Scope, path string) (io.ReadClo
 // not exist — behavior is safe for idempotent cleanup workflows
 // that may double-delete.
 func (s *storage) Delete(ctx context.Context, scope Scope, path string) error {
-	key, err := objectKey(scope, path)
+	key, err := ObjectKey(scope, path)
 	if err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func stripScopePrefix(key string, scope Scope) string {
 // into the bucket. Backends that cannot sign URLs (mem, file) return
 // ErrPresignNotSupported so the API layer can fall back to streaming.
 func (s *storage) PresignPut(ctx context.Context, scope Scope, path string, opts PutOptions, ttl time.Duration) (*PresignedURL, error) {
-	key, err := objectKey(scope, path)
+	key, err := ObjectKey(scope, path)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (s *storage) PresignPut(ctx context.Context, scope Scope, path string, opts
 // directly from the bucket. Backends that cannot sign URLs return
 // ErrPresignNotSupported.
 func (s *storage) PresignGet(ctx context.Context, scope Scope, path string, ttl time.Duration) (*PresignedURL, error) {
-	key, err := objectKey(scope, path)
+	key, err := ObjectKey(scope, path)
 	if err != nil {
 		return nil, err
 	}

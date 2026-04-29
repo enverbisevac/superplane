@@ -21,6 +21,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/superplanehq/superplane/pkg/authentication"
 	"github.com/superplanehq/superplane/pkg/authorization"
+	"github.com/superplanehq/superplane/pkg/blob"
 	"github.com/superplanehq/superplane/pkg/core"
 	"github.com/superplanehq/superplane/pkg/database"
 	"github.com/superplanehq/superplane/pkg/grpc"
@@ -89,6 +90,7 @@ type Server struct {
 	authHandler           *authentication.Handler
 	isDev                 bool
 	usageService          usage.Service
+	BlobStorage           blob.Storage
 }
 
 // WebsocketHub returns the websocket hub for this server
@@ -352,6 +354,35 @@ func (s *Server) RegisterGRPCGateway(grpcServerAddr string) error {
 	s.Router.PathPrefix("/api/v1/invite-links").Handler(protectedAccountGRPCHandler)
 	s.Router.PathPrefix("/api/v1/integrations").Handler(protectedGRPCHandler)
 	s.Router.PathPrefix("/api/v1/secrets").Handler(protectedGRPCHandler)
+	//
+	// Streaming upload/download fallback for backends that cannot
+	// presign (mem://, file://). These specific routes must be
+	// registered BEFORE the /api/v1/blobs PathPrefix below so
+	// Gorilla mux matches them first.
+	//
+	if s.BlobStorage != nil {
+		h := newBlobStreamHandler(s.BlobStorage)
+		streamWrapper := func(next http.HandlerFunc) http.Handler {
+			return orgAuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				user, ok := middleware.GetUserFromContext(r.Context())
+				if !ok {
+					http.Error(w, "User not found in context", http.StatusUnauthorized)
+					return
+				}
+				r2 := new(http.Request)
+				*r2 = *r
+				r2.URL = new(url.URL)
+				*r2.URL = *r.URL
+				r2.Header = r.Header.Clone()
+				r2.Header.Set("x-User-id", user.ID.String())
+				r2.Header.Set("x-Organization-id", user.OrganizationID.String())
+				next.ServeHTTP(w, r2.WithContext(r.Context()))
+			}))
+		}
+		s.Router.Handle("/api/v1/blobs/{id}:stream", streamWrapper(h.Upload)).Methods("PUT")
+		s.Router.Handle("/api/v1/blobs/{id}:download", streamWrapper(h.Download)).Methods("GET")
+	}
+	s.Router.PathPrefix("/api/v1/blobs").Handler(protectedGRPCHandler)
 	s.Router.PathPrefix("/api/v1/me").Handler(protectedGRPCHandler)
 	s.Router.PathPrefix("/api/v1/components").Handler(protectedGRPCHandler)
 	s.Router.PathPrefix("/api/v1/triggers").Handler(protectedGRPCHandler)
