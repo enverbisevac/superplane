@@ -9,6 +9,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/superplanehq/superplane/pkg/authorization"
+	"github.com/superplanehq/superplane/pkg/blob"
 	"github.com/superplanehq/superplane/pkg/config"
 	"github.com/superplanehq/superplane/pkg/crypto"
 	grpc "github.com/superplanehq/superplane/pkg/grpc"
@@ -235,6 +236,7 @@ func startInternalAPI(
 	jwtSigner *jwt.Signer,
 	authService authorization.Authorization,
 	registry *registry.Registry,
+	blobStorage blob.Storage,
 	oidcProvider oidc.Provider,
 ) {
 	log.Println("Starting Internal API")
@@ -247,12 +249,22 @@ func startInternalAPI(
 		jwtSigner,
 		authService,
 		registry,
+		blobStorage,
 		oidcProvider,
 		lookupInternalAPIPort(),
 	)
 }
 
-func startPublicAPI(baseURL, basePath string, encryptor crypto.Encryptor, registry *registry.Registry, jwtSigner *jwt.Signer, oidcProvider oidc.Provider, authService authorization.Authorization) {
+func startPublicAPI(
+	baseURL string,
+	basePath string,
+	encryptor crypto.Encryptor,
+	registry *registry.Registry,
+	jwtSigner *jwt.Signer,
+	oidcProvider oidc.Provider,
+	authService authorization.Authorization,
+	blobStorage blob.Storage,
+) {
 	log.Println("Starting Public API with integrated Web Server")
 
 	appEnv := os.Getenv("APP_ENV")
@@ -281,6 +293,8 @@ func startPublicAPI(baseURL, basePath string, encryptor crypto.Encryptor, regist
 	if err != nil {
 		log.Panicf("Error creating public API server: %v", err)
 	}
+
+	server.BlobStorage = blobStorage
 
 	// Start the EventDistributer worker if enabled
 	if os.Getenv("START_EVENT_DISTRIBUTER") == "yes" {
@@ -457,12 +471,17 @@ func Start() {
 
 	templates.Setup(registry)
 
+	blobStorage, err := blob.NewFromEnv(context.Background())
+	if err != nil {
+		log.Fatalf("failed to initialize blob storage: %v", err)
+	}
+
 	if os.Getenv("START_PUBLIC_API") == "yes" {
-		go startPublicAPI(baseURL, basePath, encryptorInstance, registry, jwtSigner, oidcProvider, authService)
+		go startPublicAPI(baseURL, basePath, encryptorInstance, registry, jwtSigner, oidcProvider, authService, blobStorage)
 	}
 
 	if os.Getenv("START_INTERNAL_API") == "yes" {
-		go startInternalAPI(baseURL, webhooksBaseURL, basePath, encryptorInstance, jwtSigner, authService, registry, oidcProvider)
+		go startInternalAPI(baseURL, webhooksBaseURL, basePath, encryptorInstance, jwtSigner, authService, registry, blobStorage, oidcProvider)
 	}
 
 	startWorkers(encryptorInstance, registry, oidcProvider, baseURL, authService)

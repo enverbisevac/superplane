@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/superplanehq/superplane/pkg/blob"
 	"github.com/superplanehq/superplane/pkg/database"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -27,39 +28,59 @@ const (
 // Blob is a row in the blobs table. `pending` rows represent in-flight
 // presigned-upload attempts; `ready` rows are what callers see.
 type Blob struct {
-	ID              uuid.UUID `gorm:"primaryKey;default:gen_random_uuid()"`
-	OrganizationID  uuid.UUID
-	ScopeType       string
-	CanvasID        *uuid.UUID
-	NodeID          *string
-	ExecutionID     *uuid.UUID
-	Path            string
-	ObjectKey       string
-	SizeBytes       int64
-	ContentType     *string
-	Status          string
-	CreatedBy *uuid.UUID
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID             uuid.UUID `gorm:"primaryKey;default:gen_random_uuid()"`
+	OrganizationID uuid.UUID
+	ScopeType      string
+	CanvasID       *uuid.UUID
+	NodeID         *string
+	ExecutionID    *uuid.UUID
+	Path           string
+	ObjectKey      string
+	SizeBytes      int64
+	ContentType    *string
+	Status         string
+	CreatedBy      *uuid.UUID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 func (*Blob) TableName() string {
 	return "blobs"
 }
 
+// BlobScope converts the row's scope + ID fields into a pkg/blob.Scope.
+// Shared by the gRPC actions and the public stream handlers so the
+// mapping lives in exactly one place.
+func (b *Blob) BlobScope() blob.Scope {
+	s := blob.Scope{
+		Type:           blob.ScopeType(b.ScopeType),
+		OrganizationID: b.OrganizationID.String(),
+	}
+	if b.CanvasID != nil {
+		s.CanvasID = b.CanvasID.String()
+	}
+	if b.NodeID != nil {
+		s.NodeID = *b.NodeID
+	}
+	if b.ExecutionID != nil {
+		s.ExecutionID = b.ExecutionID.String()
+	}
+	return s
+}
+
 // CreatePendingBlobInput is the request payload for CreatePendingBlob.
 // The caller is responsible for computing object_key from (scope, path)
 // in the blob package — the model layer trusts it as-is.
 type CreatePendingBlobInput struct {
-	OrganizationID  uuid.UUID
-	ScopeType       string
-	CanvasID        *uuid.UUID
-	NodeID          *string
-	ExecutionID     *uuid.UUID
-	Path            string
-	ObjectKey       string
-	ContentType     *string
-	CreatedBy *uuid.UUID
+	OrganizationID uuid.UUID
+	ScopeType      string
+	CanvasID       *uuid.UUID
+	NodeID         *string
+	ExecutionID    *uuid.UUID
+	Path           string
+	ObjectKey      string
+	ContentType    *string
+	CreatedBy      *uuid.UUID
 }
 
 func FindBlob(id uuid.UUID) (*Blob, error) {
@@ -203,18 +224,18 @@ func applyScopeIDFilters(
 func CreatePendingBlob(tx *gorm.DB, input CreatePendingBlobInput) (*Blob, error) {
 	now := time.Now()
 	blob := Blob{
-		OrganizationID:  input.OrganizationID,
-		ScopeType:       input.ScopeType,
-		CanvasID:        input.CanvasID,
-		NodeID:          input.NodeID,
-		ExecutionID:     input.ExecutionID,
-		Path:            input.Path,
-		ObjectKey:       input.ObjectKey,
-		ContentType:     input.ContentType,
-		Status:          BlobStatusPending,
-		CreatedBy: input.CreatedBy,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		OrganizationID: input.OrganizationID,
+		ScopeType:      input.ScopeType,
+		CanvasID:       input.CanvasID,
+		NodeID:         input.NodeID,
+		ExecutionID:    input.ExecutionID,
+		Path:           input.Path,
+		ObjectKey:      input.ObjectKey,
+		ContentType:    input.ContentType,
+		Status:         BlobStatusPending,
+		CreatedBy:      input.CreatedBy,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	err := tx.Clauses(clause.Returning{}).Create(&blob).Error

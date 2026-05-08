@@ -79,7 +79,7 @@ func TestValidateScope_Invalid(t *testing.T) {
 	}
 }
 
-func TestObjectKey(t *testing.T) {
+func TestObjectKey_Valid(t *testing.T) {
 	cases := []struct {
 		name     string
 		scope    Scope
@@ -113,7 +113,7 @@ func TestObjectKey(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := objectKey(c.scope, c.path)
+			got, err := ObjectKey(c.scope, c.path)
 			require.NoError(t, err)
 			require.Equal(t, c.expected, got)
 		})
@@ -121,12 +121,12 @@ func TestObjectKey(t *testing.T) {
 }
 
 func TestObjectKey_RejectsBadScope(t *testing.T) {
-	_, err := objectKey(Scope{Type: ScopeCanvas, OrganizationID: "org-1"}, "foo")
+	_, err := ObjectKey(Scope{Type: ScopeCanvas, OrganizationID: "org-1"}, "foo")
 	require.ErrorIs(t, err, ErrInvalidScope)
 }
 
 func TestObjectKey_RejectsBadPath(t *testing.T) {
-	_, err := objectKey(
+	_, err := ObjectKey(
 		Scope{Type: ScopeCanvas, OrganizationID: "org-1", CanvasID: "cvs-1"},
 		"../etc/passwd",
 	)

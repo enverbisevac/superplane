@@ -10,6 +10,7 @@ import (
 	"github.com/superplanehq/superplane/pkg/jwt"
 	"github.com/superplanehq/superplane/pkg/models"
 	pbAgents "github.com/superplanehq/superplane/pkg/protos/agents"
+	pbBlobs "github.com/superplanehq/superplane/pkg/protos/blobs"
 	pbBlueprints "github.com/superplanehq/superplane/pkg/protos/blueprints"
 	pbCanvases "github.com/superplanehq/superplane/pkg/protos/canvases"
 	pbComponents "github.com/superplanehq/superplane/pkg/protos/components"
@@ -90,6 +91,14 @@ func NewAuthorizationInterceptor(authService Authorization) *AuthorizationInterc
 		pbSecrets.Secrets_SetSecretKey_FullMethodName:     {Resource: "secrets", Action: "update", DomainType: models.DomainTypeOrganization},
 		pbSecrets.Secrets_DeleteSecretKey_FullMethodName:  {Resource: "secrets", Action: "update", DomainType: models.DomainTypeOrganization},
 		pbSecrets.Secrets_UpdateSecretName_FullMethodName: {Resource: "secrets", Action: "update", DomainType: models.DomainTypeOrganization},
+
+		// Blobs rules
+		pbBlobs.Blobs_StoreBlob_FullMethodName:         {Resource: "blobs", Action: "create", DomainType: models.DomainTypeOrganization},
+		pbBlobs.Blobs_CompleteStoreBlob_FullMethodName: {Resource: "blobs", Action: "create", DomainType: models.DomainTypeOrganization},
+		pbBlobs.Blobs_ListBlobs_FullMethodName:         {Resource: "blobs", Action: "read", DomainType: models.DomainTypeOrganization},
+		pbBlobs.Blobs_DescribeBlob_FullMethodName:      {Resource: "blobs", Action: "read", DomainType: models.DomainTypeOrganization},
+		pbBlobs.Blobs_DownloadBlob_FullMethodName:      {Resource: "blobs", Action: "read", DomainType: models.DomainTypeOrganization},
+		pbBlobs.Blobs_DeleteBlob_FullMethodName:        {Resource: "blobs", Action: "delete", DomainType: models.DomainTypeOrganization},
 
 		// Groups rules
 		pbGroups.Groups_CreateGroup_FullMethodName:         {Resource: "groups", Action: "create", DomainType: models.DomainTypeOrganization},

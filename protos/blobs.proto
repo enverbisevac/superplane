@@ -1,0 +1,257 @@
+syntax = "proto3";
+
+package Superplane.Blobs;
+
+import "google/protobuf/timestamp.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/superplanehq/superplane/pkg/protos/blobs";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Superplane Blobs API";
+    version: "1.0";
+    description: "API for Superplane blob storage (organization / canvas / node / execution scoped files).";
+    contact: {
+      name: "API Support";
+      email: "support@superplane.com";
+    };
+  };
+  schemes: HTTPS;
+  schemes: HTTP;
+  consumes: "application/json";
+  produces: "application/json";
+};
+
+// BlobScopeType names one of the four levels blobs can live at.
+// Values map 1:1 onto pkg/blob.ScopeType and the `scope_type` column
+// values in the `blobs` table ("org", "canvas", "node", "execution").
+enum BlobScopeType {
+  BLOB_SCOPE_UNSPECIFIED   = 0;
+  BLOB_SCOPE_ORGANIZATION  = 1;
+  BLOB_SCOPE_CANVAS        = 2;
+  BLOB_SCOPE_NODE          = 3;
+  BLOB_SCOPE_EXECUTION     = 4;
+}
+
+// BlobScope identifies a blob namespace. Only the ID fields required
+// by the scope type should be set; the server rejects requests where
+// extra fields are populated or required fields are missing. Rules:
+//   - BLOB_SCOPE_ORGANIZATION: organization_id only
+//   - BLOB_SCOPE_CANVAS:       organization_id + canvas_id
+//   - BLOB_SCOPE_NODE:         organization_id + canvas_id + node_id
+//   - BLOB_SCOPE_EXECUTION:    organization_id + execution_id
+// organization_id is always required. Setting any field not listed
+// for the chosen scope_type is a validation error.
+message BlobScope {
+  BlobScopeType type            = 1;
+  string        organization_id = 2; // always required
+  string        canvas_id       = 3; // canvas + node scopes
+  string        node_id         = 4; // node scope
+  string        execution_id    = 5; // execution scope
+}
+
+// PutOptions carries hints about how to write a blob. Mirrors
+// pkg/blob.PutOptions.
+message PutOptions {
+  string content_type = 1;
+}
+
+// Blob is the API view of a single stored blob. Pending blobs
+// (mid-upload) are returned from StoreBlob/CompleteStoreBlob;
+// ListBlobs / DescribeBlob / DownloadBlob return only ready blobs.
+message Blob {
+  string                      id                 = 1;
+  BlobScope                   scope              = 2;
+  string                      path               = 3;
+  int64                       size_bytes         = 4;
+  string                      content_type       = 5;
+  Status                      status             = 6;
+  string                      created_by_user_id = 7;
+  google.protobuf.Timestamp   created_at         = 8;
+  google.protobuf.Timestamp   updated_at         = 9;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_PENDING     = 1;
+    STATUS_READY       = 2;
+  }
+}
+
+// UploadInstructions tells the client how to upload bytes. One-of:
+// either a presigned URL (cloud backends) or a stream URL relative to
+// the API host (mem/file backends — streams through the API).
+message UploadInstructions {
+  string                    url         = 1;
+  string                    method      = 2; // "PUT"
+  map<string, string>       headers     = 3; // headers the client must send
+  google.protobuf.Timestamp expires_at  = 4;
+  Mode                      mode        = 5;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_PRESIGNED   = 1; // client uploads directly to the bucket
+    MODE_STREAM      = 2; // client uploads to /api/v1/blobs/{id}:stream
+  }
+}
+
+// DownloadInstructions is the mirror of UploadInstructions for reads.
+message DownloadInstructions {
+  string                    url        = 1;
+  string                    method     = 2; // "GET"
+  google.protobuf.Timestamp expires_at = 3;
+  UploadInstructions.Mode   mode       = 4; // presigned vs stream
+}
+
+// -------- StoreBlob --------
+// Two-phase upload: (1) StoreBlob creates a pending row and returns
+// upload instructions; (2) client uploads bytes; (3) CompleteStoreBlob
+// verifies the upload and flips the row to ready.
+message StoreBlobRequest {
+  BlobScope  scope         = 1;
+  string     path          = 2;
+  PutOptions options       = 3;
+  int64      size_bytes    = 4; // client-declared size; server validates on Complete
+  bool       if_not_exists = 5; // if true, reject when a ready blob exists at path
+  // TTL for the returned upload URL, in seconds. Zero means server default
+  // (15 minutes). Capped server-side.
+  int64      url_ttl_seconds = 6;
+}
+
+message StoreBlobResponse {
+  Blob               blob    = 1; // in pending status
+  UploadInstructions upload  = 2;
+}
+
+// -------- CompleteStoreBlob --------
+message CompleteStoreBlobRequest {
+  string id = 1; // blob ID returned by StoreBlob
+}
+
+message CompleteStoreBlobResponse {
+  Blob blob = 1; // now in ready status
+}
+
+// -------- ListBlobs --------
+// Returns READY blobs in a scope, newest first. `page_size` caps
+// results; `page_token` is an opaque cursor (currently a created_at
+// timestamp, but callers must treat it as opaque).
+message ListBlobsRequest {
+  BlobScope scope      = 1;
+  int32     page_size  = 2;
+  string    page_token = 3;
+  string    prefix     = 4; // optional path prefix filter
+}
+
+message ListBlobsResponse {
+  repeated Blob blobs           = 1;
+  string        next_page_token = 2;
+}
+
+// -------- DescribeBlob --------
+message DescribeBlobRequest {
+  string id = 1;
+}
+
+message DescribeBlobResponse {
+  Blob blob = 1;
+}
+
+// -------- DownloadBlob --------
+message DownloadBlobRequest {
+  string id              = 1;
+  int64  url_ttl_seconds = 2; // zero ⇒ server default
+}
+
+message DownloadBlobResponse {
+  Blob                 blob     = 1;
+  DownloadInstructions download = 2;
+}
+
+// -------- DeleteBlob --------
+message DeleteBlobRequest {
+  string id = 1;
+}
+
+message DeleteBlobResponse {}
+
+service Blobs {
+  // Begin a two-phase upload. Returns upload instructions (presigned
+  // URL for cloud backends, stream URL for mem/file).
+  rpc StoreBlob(StoreBlobRequest) returns (StoreBlobResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/blobs"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Begin a blob upload";
+      description: "Creates a pending blob row and returns upload instructions: either a presigned PUT URL (cloud backends) or a stream URL relative to the API host (in-memory / filesystem backends).";
+      tags: "Blob";
+    };
+  }
+
+  // Finalize an upload: HEAD the bucket object, verify it exists,
+  // flip the DB row from pending to ready.
+  rpc CompleteStoreBlob(CompleteStoreBlobRequest) returns (CompleteStoreBlobResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/blobs/{id}:complete"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Finalize a blob upload";
+      description: "HEADs the uploaded bucket object and flips the DB row from pending to ready.";
+      tags: "Blob";
+    };
+  }
+
+  // List ready blobs in a scope, newest first.
+  rpc ListBlobs(ListBlobsRequest) returns (ListBlobsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/blobs"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "List blobs in a scope";
+      description: "Returns ready blobs in a scope, newest first, with optional path-prefix filter and cursor-based pagination.";
+      tags: "Blob";
+    };
+  }
+
+  // Describe a blob by ID.
+  rpc DescribeBlob(DescribeBlobRequest) returns (DescribeBlobResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/blobs/{id}"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Describe a blob";
+      description: "Returns metadata for a blob by ID. Pending blobs are visible so clients can poll an upload.";
+      tags: "Blob";
+    };
+  }
+
+  // Issue download instructions (presigned GET or stream URL).
+  rpc DownloadBlob(DownloadBlobRequest) returns (DownloadBlobResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/blobs/{id}:download"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Issue download instructions";
+      description: "Returns either a presigned GET URL (cloud backends) or a stream URL that the client fetches from the API.";
+      tags: "Blob";
+    };
+  }
+
+  // Delete a blob (DB row + bucket object). Idempotent — a second
+  // delete returns NotFound, not Internal.
+  rpc DeleteBlob(DeleteBlobRequest) returns (DeleteBlobResponse) {
+    option (google.api.http) = {
+      delete: "/api/v1/blobs/{id}"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Delete a blob";
+      description: "Deletes the DB row and best-effort removes the bucket object. Idempotent: a second delete returns NotFound.";
+      tags: "Blob";
+    };
+  }
+}
