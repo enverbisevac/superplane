@@ -16,6 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/superplanehq/superplane/pkg/authorization"
+	"github.com/superplanehq/superplane/pkg/blob"
 	"github.com/superplanehq/superplane/pkg/configuration"
 	"github.com/superplanehq/superplane/pkg/core"
 	"github.com/superplanehq/superplane/pkg/crypto"
@@ -35,6 +36,7 @@ type NodeExecutor struct {
 	encryptor      crypto.Encryptor
 	registry       *registry.Registry
 	authService    authorization.Authorization
+	blobStorage    blob.Storage
 	baseURL        string
 	webhookBaseURL string
 	semaphore      *semaphore.Weighted
@@ -44,7 +46,15 @@ type NodeExecutor struct {
 	consumer    *tackle.Consumer
 }
 
-func NewNodeExecutor(encryptor crypto.Encryptor, registry *registry.Registry, baseURL string, webhookBaseURL string, rabbitMQURL string, authService authorization.Authorization) *NodeExecutor {
+func NewNodeExecutor(
+	encryptor crypto.Encryptor,
+	registry *registry.Registry,
+	baseURL string,
+	webhookBaseURL string,
+	rabbitMQURL string,
+	authService authorization.Authorization,
+	blobStorage blob.Storage,
+) *NodeExecutor {
 	return &NodeExecutor{
 		encryptor:      encryptor,
 		registry:       registry,
@@ -54,6 +64,7 @@ func NewNodeExecutor(encryptor crypto.Encryptor, registry *registry.Registry, ba
 		logger:         logrus.WithFields(logrus.Fields{"worker": "NodeExecutor"}),
 		rabbitMQURL:    rabbitMQURL,
 		authService:    authService,
+		blobStorage:    blobStorage,
 	}
 }
 
@@ -391,6 +402,12 @@ func (w *NodeExecutor) executeComponentNode(tx *gorm.DB, execution *models.Canva
 		CanvasMemory:   contexts.NewCanvasMemoryContext(tx, execution.WorkflowID),
 		Webhook:        contexts.NewNodeWebhookContext(context.Background(), tx, w.encryptor, node, w.webhookBaseURL),
 		Expressions:    contexts.NewExpressionContext(builder),
+		Blobs: contexts.NewBlobsContext(w.blobStorage, contexts.ContextScope{
+			OrganizationID: workflow.OrganizationID.String(),
+			CanvasID:       workflow.ID.String(),
+			NodeID:         execution.NodeID,
+			ExecutionID:    execution.ID.String(),
+		}),
 	}
 
 	if node.AppInstallationID != nil {
