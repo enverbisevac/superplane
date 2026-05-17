@@ -2,17 +2,26 @@ package core
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	"github.com/superplanehq/superplane/pkg/blob"
 	"github.com/superplanehq/superplane/pkg/configuration"
 )
 
 var DefaultOutputChannel = OutputChannel{Name: "default", Label: "Default"}
 
 var ErrSecretKeyNotFound = errors.New("secret or key not found")
+
+// BlobInfo describes a stored blob without its contents. Re-exported from
+// pkg/blob so component authors only depend on pkg/core.
+type BlobInfo = blob.BlobInfo
+
+// PutBlobOptions controls how a blob is written via ctx.Blobs.
+type PutBlobOptions = blob.PutOptions
 
 type Component interface {
 
@@ -157,6 +166,52 @@ type ExecutionContext struct {
 	CanvasMemory   CanvasMemoryContext
 	Webhook        NodeWebhookContext
 	Expressions    ExpressionContext
+	Blobs          BlobsContext
+}
+
+// BlobsContext gives a component scoped access to blob storage.
+//
+// The four accessors return distinct interfaces so the writable surface
+// is only reachable via Execution(). A component running during an
+// execution is the only legitimate writer to that execution's blobs;
+// Canvas/Node/Organization blobs are shared resources that users manage
+// via the UI or CLI, and silently overwriting shared config from a
+// component would be a footgun. Keeping writes execution-scoped also
+// keeps authorization trivial — no per-component write check on higher
+// scopes. Higher-scope writes can be added later as an opt-in if a use
+// case warrants it.
+type BlobsContext interface {
+	Execution() ExecutionBlobs
+	Node() NodeBlobs
+	Canvas() CanvasBlobs
+	Organization() OrganizationBlobs
+}
+
+// ExecutionBlobs is the read/write surface scoped to the running execution.
+type ExecutionBlobs interface {
+	Put(path string, body io.Reader, opts PutBlobOptions) error
+	Get(path string) (io.ReadCloser, BlobInfo, error)
+	List(prefix string) ([]BlobInfo, error)
+	Delete(path string) error
+}
+
+// NodeBlobs is the read-only surface scoped to the current node.
+type NodeBlobs interface {
+	Get(path string) (io.ReadCloser, BlobInfo, error)
+	List(prefix string) ([]BlobInfo, error)
+}
+
+// CanvasBlobs is the read-only surface scoped to the current canvas.
+type CanvasBlobs interface {
+	Get(path string) (io.ReadCloser, BlobInfo, error)
+	List(prefix string) ([]BlobInfo, error)
+}
+
+// OrganizationBlobs is the read-only surface scoped to the current
+// organization.
+type OrganizationBlobs interface {
+	Get(path string) (io.ReadCloser, BlobInfo, error)
+	List(prefix string) ([]BlobInfo, error)
 }
 
 type ExpressionContext interface {

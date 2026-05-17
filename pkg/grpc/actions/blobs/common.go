@@ -99,8 +99,11 @@ type resolvedScope struct {
 // Returns codes.InvalidArgument for malformed input and codes.NotFound
 // (not PermissionDenied - mirror the existing pattern in
 // pkg/grpc/actions/secrets) when IDs do not belong to the org.
-func resolveAndValidateScope(ctx context.Context, orgID string, scope *pb.BlobScope) (*resolvedScope, error) {
-	_ = ctx
+func resolveAndValidateScope(
+	_ context.Context,
+	orgID string,
+	scope *pb.BlobScope,
+) (*resolvedScope, error) {
 	if scope == nil {
 		return nil, status.Error(codes.InvalidArgument, "missing scope")
 	}
@@ -302,7 +305,11 @@ func buildStreamPath(id uuid.UUID, verb string) string {
 // the row belongs to the authenticated organization. The req
 // parameter is the typed proto request; its GetId method is
 // nil-safe (generated protos return "" on a nil receiver).
-func loadAuthenticatedBlobByID(ctx context.Context, orgID string, req interface{ GetId() string }) (*models.Blob, error) {
+func loadAuthenticatedBlobByID(
+	ctx context.Context,
+	orgID string,
+	req interface{ GetId() string },
+) (*models.Blob, error) {
 	if _, userIsSet := authentication.GetUserIdFromMetadata(ctx); !userIsSet {
 		return nil, status.Error(codes.Unauthenticated, "user not authenticated")
 	}

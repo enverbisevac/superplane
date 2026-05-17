@@ -90,7 +90,7 @@ import (
 	_ "github.com/superplanehq/superplane/pkg/widgets/annotation"
 )
 
-func startWorkers(encryptor crypto.Encryptor, registry *registry.Registry, oidcProvider oidc.Provider, baseURL string, authService authorization.Authorization) {
+func startWorkers(encryptor crypto.Encryptor, registry *registry.Registry, oidcProvider oidc.Provider, baseURL string, authService authorization.Authorization, blobStorage blob.Storage) {
 	log.Println("Starting Workers")
 
 	rabbitMQURL, err := config.RabbitMQURL()
@@ -113,7 +113,7 @@ func startWorkers(encryptor crypto.Encryptor, registry *registry.Registry, oidcP
 		log.Println("Starting Node Executor")
 
 		webhookBaseURL := getWebhookBaseURL(baseURL)
-		w := workers.NewNodeExecutor(encryptor, registry, baseURL, webhookBaseURL, rabbitMQURL, authService)
+		w := workers.NewNodeExecutor(encryptor, registry, baseURL, webhookBaseURL, rabbitMQURL, authService, blobStorage)
 		go w.Start(context.Background())
 	}
 
@@ -484,7 +484,7 @@ func Start() {
 		go startInternalAPI(baseURL, webhooksBaseURL, basePath, encryptorInstance, jwtSigner, authService, registry, blobStorage, oidcProvider)
 	}
 
-	startWorkers(encryptorInstance, registry, oidcProvider, baseURL, authService)
+	startWorkers(encryptorInstance, registry, oidcProvider, baseURL, authService, blobStorage)
 
 	log.Println("SuperPlane is UP.")
 
